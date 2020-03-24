@@ -83,21 +83,28 @@ func (b *SSEHandler) Subscribe(c *gin.Context) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	// Create a new channel, over which we can send this client messages.
 	messageChan := make(chan string)
 	// Add this client to the map of those that should receive updates
 	b.newClients <- messageChan
 
-	notify := w.(http.CloseNotifier).CloseNotify()
+	// listen connection close and un-register messageChan
+	// notify := w.(http.CloseNotifier).CloseNotify()
+	notify := req.Context().Done()
 	go func() {
 		<-notify
 		// Remove this client from the map of attached clients
 		b.defunctClients <- messageChan
 	}()
+	log.Println("Subscribed from someone.")
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(200)
+	f.Flush()
 
 	for {
 		msg, open := <-messageChan
@@ -112,6 +119,4 @@ func (b *SSEHandler) Subscribe(c *gin.Context) {
 		// supports streaming.
 		f.Flush()
 	}
-
-	c.AbortWithStatus(http.StatusOK)
 }
